@@ -1,0 +1,811 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Focus</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Instrument+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #fafaf8;
+    --bg2: #f4f3f0;
+    --surface: #ffffff;
+    --border: #e8e6e1;
+    --border2: #d4d1ca;
+    --text: #1a1916;
+    --muted: #9e9b94;
+    --muted2: #c2bfb8;
+    --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04);
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+    --r: 14px; --r-sm: 9px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body {
+    font-family: 'Instrument Sans', sans-serif;
+    background: var(--bg); color: var(--text);
+    min-height: 100vh; max-width: 430px; margin: 0 auto; overflow-x: hidden;
+  }
+
+  /* NAV */
+  .nav {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(250,250,248,0.93); backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 20px;
+  }
+  .nav-left { display: flex; flex-direction: column; gap: 2px; }
+  .nav-logo { font-family: 'Instrument Sans', sans-serif; font-size: 36px; font-weight: 700; letter-spacing: -.01em; line-height: 1; color: var(--text); }
+  .nav-date { font-size: 14px; color: var(--muted); letter-spacing: .01em; font-weight: 400; }
+  .nav-pill {
+    background: var(--text); color: var(--bg);
+    border-radius: 20px; padding: 5px 15px;
+    font-size: 13px; font-weight: 500; letter-spacing: .02em;
+    flex-shrink: 0;
+  }
+
+  /* SCREENS */
+  .screen { display: none; padding: 0 16px 100px; }
+  .screen.active { display: block; }
+
+  /* TODAY */
+  .today-hd { padding: 16px 0 12px; }
+  .today-sub { font-size: 12.5px; color: var(--muted); letter-spacing: .01em; }
+
+  /* CARDS */
+  .cat-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--r); margin-bottom: 10px;
+    box-shadow: var(--shadow-sm); overflow: hidden;
+    transition: box-shadow .2s, border-color .2s;
+    animation: up .3s ease both;
+  }
+  .cat-card:hover { box-shadow: var(--shadow); }
+  .cat-card.done { opacity: 0.55; }
+  .cat-card:nth-child(1){animation-delay:.04s}
+  .cat-card:nth-child(2){animation-delay:.09s}
+  .cat-card:nth-child(3){animation-delay:.14s}
+  .cat-card:nth-child(4){animation-delay:.19s}
+  .cat-card:nth-child(5){animation-delay:.24s}
+  .cat-card:nth-child(6){animation-delay:.29s}
+  @keyframes up { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+
+  .cat-hd { display: flex; align-items: center; gap: 13px; padding: 14px 16px; cursor: pointer; user-select: none; }
+  .cat-pip { width: 3px; height: 38px; border-radius: 2px; flex-shrink: 0; }
+  .cat-info { flex: 1; min-width: 0; }
+  .cat-name { font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: .1em; margin-bottom: 3px; }
+  .cat-q { font-size: 13.5px; line-height: 1.45; color: var(--text); }
+  .cat-q small { display: block; font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+  .cat-check {
+    width: 26px; height: 26px; border-radius: 50%;
+    border: 1.5px solid var(--border2);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; flex-shrink: 0; transition: all .2s;
+    font-size: 11px; color: transparent;
+  }
+  .cat-check.checked { border-color: transparent; color: white; }
+  .cat-body { padding: 0 16px 14px 48px; }
+  .cat-ta {
+    width: 100%; background: var(--bg); border: 1px solid var(--border);
+    border-radius: var(--r-sm); color: var(--text);
+    font-family: 'Instrument Sans', sans-serif; font-size: 13.5px;
+    padding: 10px 13px; resize: none; outline: none;
+    transition: border-color .2s, background .2s; line-height: 1.55; min-height: 56px;
+  }
+  .cat-ta:focus { border-color: var(--border2); background: white; }
+  .cat-ta::placeholder { color: var(--muted2); }
+
+  /* SAVE */
+  .save-btn {
+    width: 100%; padding: 14px; background: var(--text); border: none;
+    border-radius: var(--r); color: var(--bg);
+    font-family: 'Instrument Sans', sans-serif; font-size: 14px; font-weight: 500;
+    cursor: pointer; margin-top: 10px; letter-spacing: .03em;
+    transition: opacity .2s; box-shadow: var(--shadow);
+  }
+  .save-btn:active { opacity: .75; }
+
+  /* SECTION LABEL */
+  .slabel {
+    font-size: 10px; font-weight: 500; text-transform: uppercase;
+    letter-spacing: .12em; color: var(--muted); margin: 22px 0 12px;
+  }
+
+  /* STREAK */
+  .streak-card {
+    background: var(--text); color: var(--bg);
+    border-radius: var(--r); padding: 18px 22px;
+    display: flex; align-items: center; gap: 18px;
+    box-shadow: var(--shadow); margin-bottom: 10px;
+  }
+  .streak-n { font-family: 'Cormorant Garamond', serif; font-size: 52px; font-weight: 300; line-height: 1; }
+  .streak-t { font-size: 14px; font-weight: 500; }
+  .streak-s { font-size: 12px; margin-top: 3px; opacity: .6; }
+
+  /* STATS */
+  .stats-g { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .stat-box {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--r); padding: 16px; box-shadow: var(--shadow-sm);
+  }
+  .stat-v { font-family: 'Cormorant Garamond', serif; font-size: 36px; font-weight: 300; line-height: 1; }
+  .stat-l { font-size: 12px; color: var(--muted); margin-top: 5px; }
+  .stat-s { font-size: 11px; color: var(--muted2); margin-top: 2px; }
+
+  /* WEEK */
+  .week-g { display: grid; grid-template-columns: repeat(7,1fr); gap: 5px; }
+  .wc {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; aspect-ratio: 1;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    cursor: pointer; transition: border-color .2s;
+  }
+  .wc.wc-today { border-color: var(--text); }
+  .wc.wc-future { opacity: .35; }
+  .wc-d { font-size: 8.5px; text-transform: uppercase; color: var(--muted); letter-spacing: .04em; }
+  .wc-n { font-size: 14px; font-weight: 500; margin: 2px 0; }
+  .wc-dots { display: flex; gap: 2px; flex-wrap: wrap; justify-content: center; max-width: 26px; }
+  .wc-dot { width: 4.5px; height: 4.5px; border-radius: 50%; }
+
+  /* PERIOD */
+  .period-row { display: flex; gap: 6px; padding: 4px 0 14px; overflow-x: auto; scrollbar-width: none; }
+  .period-row::-webkit-scrollbar { display: none; }
+  .pbtn {
+    flex-shrink: 0; padding: 7px 16px; border-radius: 20px; font-size: 12px; font-weight: 500;
+    cursor: pointer; border: 1px solid var(--border); color: var(--muted);
+    background: transparent; transition: all .2s; font-family: 'Instrument Sans', sans-serif;
+  }
+  .pbtn.active { background: var(--text); color: var(--bg); border-color: var(--text); }
+
+  /* HISTORY */
+  .hday { margin-bottom: 9px; }
+  .hday-hd {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 11px 14px; background: var(--surface);
+    border: 1px solid var(--border); border-radius: var(--r-sm);
+    cursor: pointer; box-shadow: var(--shadow-sm);
+  }
+  .hday-t { font-size: 13.5px; font-weight: 500; }
+  .hday-dots { display: flex; gap: 3px; }
+  .hentries { display: none; padding: 5px 0 1px; }
+  .hentries.open { display: block; }
+  .hentry {
+    display: flex; gap: 10px; align-items: flex-start;
+    padding: 7px 14px; border-left: 2px solid var(--border);
+    margin-left: 10px; margin-bottom: 3px;
+  }
+  .hcat { font-size: 10px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); min-width: 56px; margin-top: 1px; }
+  .htxt { font-size: 13px; line-height: 1.4; flex: 1; }
+  .hchk { font-size: 11px; color: var(--muted); }
+
+  /* PLAN */
+  .plan-cats { display: flex; gap: 6px; overflow-x: auto; padding: 4px 0 14px; scrollbar-width: none;
+    position: sticky; top: 65px; z-index: 50;
+    background: var(--bg); padding-top: 10px; padding-bottom: 10px;
+    border-bottom: 1px solid var(--border); margin: 0 -16px; padding-left: 16px; padding-right: 16px;
+  }
+  .plan-cats::-webkit-scrollbar { display: none; }
+  .pcbtn {
+    flex-shrink: 0; padding: 7px 16px; border-radius: 20px; font-size: 12px; font-weight: 500;
+    cursor: pointer; border: 1px solid var(--border); color: var(--muted);
+    background: transparent; transition: all .2s; display: flex; align-items: center; gap: 7px;
+    font-family: 'Instrument Sans', sans-serif;
+  }
+  .pcbtn.active { color: var(--text); border-color: var(--text); background: var(--surface); }
+  .ppip { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .plan-tl { padding-top: 14px; }
+  .plan-row { margin-bottom: 10px; }
+  .plan-today { padding: 12px; background: var(--surface); border: 1px solid var(--border2); border-radius: var(--r); box-shadow: var(--shadow-sm); margin-bottom: 14px; }
+  .plan-lbl { font-size: 11.5px; color: var(--muted); margin-bottom: 5px; font-weight: 400; }
+  .plan-lbl.tday { color: var(--text); font-weight: 600; font-size: 12.5px; }
+  .plan-lbl.past-lbl { color: var(--muted2); }
+  .plan-ta {
+    width: 100%; background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--r-sm); color: var(--text);
+    font-family: 'Instrument Sans', sans-serif; font-size: 13.5px;
+    padding: 10px 13px; resize: none; outline: none;
+    transition: border-color .2s, box-shadow .2s; min-height: 42px;
+    line-height: 1.5; box-shadow: var(--shadow-sm);
+  }
+  .plan-ta:focus { border-color: var(--border2); box-shadow: var(--shadow); }
+  .plan-ta::placeholder { color: var(--muted2); }
+  .plan-actual { font-size: 11.5px; color: var(--muted); padding-bottom: 5px; }
+
+  /* BOTTOM NAV */
+  .bnav {
+    position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
+    width: 100%; max-width: 430px;
+    background: rgba(250,250,248,0.95); backdrop-filter: blur(20px);
+    border-top: 1px solid var(--border);
+    display: flex; padding: 10px 16px 22px;
+  }
+  .bn {
+    flex: 1; display: flex; flex-direction: column; align-items: center;
+    gap: 4px; padding: 8px; cursor: pointer; border-radius: 12px; transition: background .2s;
+  }
+  .bn.active { background: var(--bg2); }
+  .bn-ico { font-size: 17px; color: var(--muted); line-height: 1; }
+  .bn.active .bn-ico { color: var(--text); }
+  .bn-lbl { font-size: 10px; color: var(--muted); letter-spacing: .05em; text-transform: uppercase; }
+  .bn.active .bn-lbl { color: var(--text); }
+
+  /* SYNC */
+  .sync-badge { font-size: 11px; letter-spacing: .02em; padding: 2px 0; }
+  .sync-syncing { color: var(--muted); }
+  .sync-synced  { color: #3d7a68; }
+  .sync-error   { color: #b85c3a; }
+  .sync-loading { color: var(--muted); }
+  .sync-btn {
+    font-size: 11px; color: var(--muted); background: none; border: 1px solid var(--border);
+    border-radius: 12px; padding: 3px 10px; cursor: pointer; font-family: 'Instrument Sans', sans-serif;
+    transition: all .2s;
+  }
+  .sync-btn:hover { border-color: var(--border2); color: var(--text); }
+  .nav-right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+  .toast {
+    position: fixed; top: 74px; left: 50%; transform: translateX(-50%);
+    background: var(--text); color: var(--bg);
+    padding: 10px 22px; border-radius: 24px;
+    font-size: 13px; font-weight: 500; z-index: 999;
+    opacity: 0; transition: opacity .25s; pointer-events: none; box-shadow: var(--shadow);
+  }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <div class="nav-left">
+    <div class="nav-logo">Focus</div>
+    <div class="nav-date" id="nav-date"></div>
+  </div>
+  <div class="nav-right">
+    <div class="nav-pill" id="nav-pill">0 / 6</div>
+    <div style="display:flex;align-items:center;gap:6px;">
+      <span class="sync-badge sync-synced" id="sync-status">✓ Notion</span>
+      <button class="sync-btn" onclick="loadFromNotion()">↓ Load</button>
+    </div>
+  </div>
+</div>
+
+<!-- TODAY -->
+<div class="screen active" id="screen-today">
+  <div class="today-hd">
+    <div class="today-sub">What matters most, right now.</div>
+  </div>
+  <div id="cards"></div>
+  <button class="save-btn" onclick="saveDay()">Save day</button>
+</div>
+
+<!-- PROGRESS -->
+<div class="screen" id="screen-history">
+  <div class="slabel" style="margin-top:20px;">Overview</div>
+  <div class="streak-card">
+    <div class="streak-n" id="streak-n">0</div>
+    <div>
+      <div class="streak-t">🔥 Day streak</div>
+      <div class="streak-s">consecutive days filled</div>
+    </div>
+  </div>
+  <div class="stats-g" id="stats-g"></div>
+  <div class="slabel">Last 7 days</div>
+  <div class="week-g" id="week-g"></div>
+  <div class="slabel">History</div>
+  <div class="period-row">
+    <button class="pbtn active" onclick="setPeriod(7,this)">7 days</button>
+    <button class="pbtn" onclick="setPeriod(30,this)">Month</button>
+    <button class="pbtn" onclick="setPeriod(90,this)">3 months</button>
+    <button class="pbtn" onclick="setPeriod(365,this)">Year</button>
+  </div>
+  <div id="hist-list"></div>
+</div>
+
+<!-- PLAN -->
+<div class="screen" id="screen-plan">
+  <div class="plan-cats" id="plan-cats"></div>
+  <div class="plan-tl" id="plan-tl"></div>
+</div>
+
+<div class="bnav">
+  <div class="bn active" id="bn-today" onclick="showScreen('today')">
+    <div class="bn-ico">◯</div><div class="bn-lbl">Today</div>
+  </div>
+  <div class="bn" id="bn-history" onclick="showScreen('history')">
+    <div class="bn-ico">◈</div><div class="bn-lbl">Progress</div>
+  </div>
+  <div class="bn" id="bn-plan" onclick="showScreen('plan')">
+    <div class="bn-ico">◫</div><div class="bn-lbl">Plan</div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const CATS=[
+  {id:'main',    name:'Core',    emoji:'⭐', color:'#2d2d2d',
+   q:'What is the single most important thing I must do today?',
+   sub:'Overall day focus',ph:'The one thing that moves everything forward…'},
+  {id:'body',    name:'Body',    emoji:'💪', color:'#3d7a68',
+   q:'What is the most important thing I can do today for my body & health?',
+   sub:'Sport, recovery, nutrition',ph:'Movement, rest, nourishment…'},
+  {id:'startup', name:'Startup', emoji:'🚀', color:'#b85c3a',
+   q:'What is the most important thing I can do today toward a billion-dollar startup?',
+   sub:'The big bet',ph:'One step closer to the vision…'},
+  {id:'ai',      name:'AI',      emoji:'🤖', color:'#4a5fa8',
+   q:'What is the most important thing I can learn today to become AI-native?',
+   sub:'Learning & practice',ph:'Skill, experiment, insight…'},
+  {id:'work',    name:'Work',    emoji:'💼', color:'#8a6e2a',
+   q:'What is the most important thing I can do at work today to create real impact?',
+   sub:'Grow influence in the team & org',ph:'High-leverage action…'},
+  {id:'future',  name:'Future',  emoji:'✨', color:'#7a4a8a',
+   q:'What is the most important thing I can do today for my future self?',
+   sub:'Long-term investment',ph:'Planting a seed for later…'},
+];
+
+const DB={
+  get(k,d=null){try{return JSON.parse(localStorage.getItem(k))??d}catch{return d}},
+  set(k,v){localStorage.setItem(k,JSON.stringify(v))}
+};
+const TZ='Europe/Luxembourg';
+function localDateStr(d=new Date()){
+  return d.toLocaleDateString('sv-SE',{timeZone:TZ});
+}
+const todayKey=()=>localDateStr();
+const getDay=k=>{const d=DB.get('fd',{});return d[k]||{entries:{}}};
+const saveDayDB=(k,v)=>{const d=DB.get('fd',{});d[k]=v;DB.set('fd',d)};
+
+// ── NOTION SYNC ──────────────────────────────────────────────────────────────
+const NOTION_DS='collection://2ab37e55-9f88-48dd-beac-f1912215b868';
+
+// Day number helper
+const DAY_ONE_SYNC=new Date(2026,2,5); // March 5 local
+function dayNum(dateStr){
+  const[y,m,d]=dateStr.split('-').map(Number);
+  const dt=new Date(y,m-1,d);
+  return Math.floor((dt-DAY_ONE_SYNC)/(864e5))+1;
+}
+
+// Debounce sync: wait 2s after last change before syncing
+let syncTimer=null;
+function scheduleSyncToNotion(dateStr){
+  clearTimeout(syncTimer);
+  syncTimer=setTimeout(()=>syncDayToNotion(dateStr),2000);
+}
+
+async function callClaude(prompt){
+  const r=await fetch('https://api.anthropic.com/v1/messages',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({
+      model:'claude-sonnet-4-20250514',
+      max_tokens:1000,
+      system:'You are a Notion API assistant. When asked to perform a Notion operation, use the available MCP tools. Respond only with "done" after completing the task.',
+      messages:[{role:'user',content:prompt}],
+      mcp_servers:[{type:'url',url:'https://mcp.notion.com/mcp',name:'notion'}]
+    })
+  });
+  return r.ok;
+}
+
+async function syncDayToNotion(dateStr){
+  setSyncStatus('syncing');
+  const day=getDay(dateStr);
+  const dn=dayNum(dateStr);
+  const [y,m,d]=dateStr.split('-').map(Number);
+  const dateLabel=new Date(y,m-1,d).toLocaleDateString('en',{month:'long',day:'numeric',year:'numeric'});
+  const e=cat=>day.entries?.[cat]||{text:'',done:false};
+  const done=cat=>e(cat).done?'__YES__':'__NO__';
+  const txt=cat=>e(cat).text||'';
+  const plans=DB.get('fp',{})||{};
+  const pl=cat=>plans[dateStr+'_'+cat]||'';
+  const score=CATS.filter(c=>e(c.id).done).length;
+
+  // Search for existing Notion page for this date
+  try{
+    const searchResp=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        model:'claude-sonnet-4-20250514',
+        max_tokens:500,
+        system:'You are a Notion API assistant. Search for a page in the Focus Tracker database where Date equals "'+dateStr+'". Return ONLY the page URL if found, or "NOT_FOUND" if not found. Nothing else.',
+        messages:[{role:'user',content:'Search Notion Focus Tracker database for page with title "'+dateStr+'"'}],
+        mcp_servers:[{type:'url',url:'https://mcp.notion.com/mcp',name:'notion'}]
+      })
+    });
+    const searchData=await searchResp.json();
+    const searchText=searchData.content?.map(b=>b.text||'').join('')||'';
+    const existingUrl=searchText.includes('notion.so')?searchText.trim():null;
+
+    const props={
+      'Date':dateStr+' — '+dateLabel,
+      'Day Number':dn,
+      'Core':txt('main'),'Core Done':done('main'),
+      'Body':txt('body'),'Body Done':done('body'),
+      'Startup':txt('startup'),'Startup Done':done('startup'),
+      'AI':txt('ai'),'AI Done':done('ai'),
+      'Work':txt('work'),'Work Done':done('work'),
+      'Future':txt('future'),'Future Done':done('future'),
+      'Score':score,
+      'Plan Core':pl('main'),'Plan Body':pl('body'),
+      'Plan Startup':pl('startup'),'Plan AI':pl('ai'),
+      'Plan Work':pl('work'),'Plan Future':pl('future'),
+    };
+
+    const propsStr=JSON.stringify(props);
+
+    if(existingUrl&&existingUrl!=='NOT_FOUND'){
+      // Update existing page
+      const pageId=existingUrl.split('-').pop()?.replace(/\//g,'')||existingUrl;
+      await fetch('https://api.anthropic.com/v1/messages',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          model:'claude-sonnet-4-20250514',
+          max_tokens:500,
+          system:'You are a Notion API assistant. Update the Notion page properties as instructed using update-page tool. Respond with "done" when complete.',
+          messages:[{role:'user',content:`Update Notion page at URL "${existingUrl.trim()}" with these properties: ${propsStr}`}],
+          mcp_servers:[{type:'url',url:'https://mcp.notion.com/mcp',name:'notion'}]
+        })
+      });
+    } else {
+      // Create new page
+      await fetch('https://api.anthropic.com/v1/messages',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          model:'claude-sonnet-4-20250514',
+          max_tokens:500,
+          system:'You are a Notion API assistant. Create a new page in the Focus Tracker Notion database (data source: '+NOTION_DS+') with the given properties. Respond with "done".',
+          messages:[{role:'user',content:`Create a new page in the Focus Tracker database with these properties: ${propsStr}`}],
+          mcp_servers:[{type:'url',url:'https://mcp.notion.com/mcp',name:'notion'}]
+        })
+      });
+    }
+    setSyncStatus('synced');
+  }catch(err){
+    console.error('Notion sync error:',err);
+    setSyncStatus('error');
+  }
+}
+
+async function loadFromNotion(){
+  setSyncStatus('loading');
+  try{
+    const resp=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        model:'claude-sonnet-4-20250514',
+        max_tokens:4000,
+        system:'You are a Notion API assistant. Fetch all pages from the Focus Tracker database and return ONLY a raw JSON array (no markdown, no backticks) where each object has keys: date (YYYY-MM-DD from Date field), dayNum, core, coreDone, body, bodyDone, startup, startupDone, ai, aiDone, work, workDone, future, futureDone, planCore, planBody, planStartup, planAI, planWork, planFuture. Boolean fields should be true/false.',
+        messages:[{role:'user',content:'Fetch all pages from the Focus Tracker Notion database at data source '+NOTION_DS+' and return JSON array of all entries.'}],
+        mcp_servers:[{type:'url',url:'https://mcp.notion.com/mcp',name:'notion'}]
+      })
+    });
+    const data=await resp.json();
+    const raw=data.content?.map(b=>b.text||'').join('')||'';
+    // Extract JSON array
+    const match=raw.match(/\[[\s\S]*\]/);
+    if(match){
+      const rows=JSON.parse(match[0]);
+      const fd=DB.get('fd',{})||{};
+      const fp=DB.get('fp',{})||{};
+      rows.forEach(r=>{
+        if(!r.date)return;
+        const dateStr=r.date.slice(0,10);
+        fd[dateStr]={entries:{
+          main:{text:r.core||'',done:!!r.coreDone},
+          body:{text:r.body||'',done:!!r.bodyDone},
+          startup:{text:r.startup||'',done:!!r.startupDone},
+          ai:{text:r.ai||'',done:!!r.aiDone},
+          work:{text:r.work||'',done:!!r.workDone},
+          future:{text:r.future||'',done:!!r.futureDone},
+        }};
+        if(r.planCore)fp[dateStr+'_main']=r.planCore;
+        if(r.planBody)fp[dateStr+'_body']=r.planBody;
+        if(r.planStartup)fp[dateStr+'_startup']=r.planStartup;
+        if(r.planAI)fp[dateStr+'_ai']=r.planAI;
+        if(r.planWork)fp[dateStr+'_work']=r.planWork;
+        if(r.planFuture)fp[dateStr+'_future']=r.planFuture;
+      });
+      DB.set('fd',fd);
+      DB.set('fp',fp);
+      setSyncStatus('synced');
+      buildCards();
+      showToast('Synced from Notion ✓');
+    } else {
+      setSyncStatus('synced');
+    }
+  }catch(err){
+    console.error('Load from Notion error:',err);
+    setSyncStatus('error');
+  }
+}
+
+function setSyncStatus(status){
+  const el=document.getElementById('sync-status');
+  if(!el)return;
+  const map={syncing:'⟳ Syncing…',synced:'✓ Synced',error:'⚠ Sync error',loading:'⟳ Loading…'};
+  el.textContent=map[status]||'';
+  el.className='sync-badge sync-'+status;
+}
+
+// TODAY
+function buildCards(){
+  const el=document.getElementById('cards');
+  el.innerHTML='';
+  const t=todayKey(),day=getDay(t);
+  CATS.forEach(cat=>{
+    const e=day.entries[cat.id]||{text:'',done:false};
+    const c=document.createElement('div');
+    c.className='cat-card'+(e.done?' done':'');
+    c.id='card-'+cat.id;
+    c.innerHTML=`
+      <div class="cat-hd" onclick="toggleCard('${cat.id}')">
+        <div class="cat-pip" style="background:${cat.color}"></div>
+        <div class="cat-info">
+          <div class="cat-name" style="color:${cat.color}">${cat.emoji} ${cat.name}</div>
+          <div class="cat-q">${cat.q}<small>${cat.sub}</small></div>
+        </div>
+        <div class="cat-check${e.done?' checked':''}" id="ck-${cat.id}"
+          style="${e.done?`background:${cat.color};border-color:${cat.color}`:''}"
+          onclick="toggleDone(event,'${cat.id}','${cat.color}')">✓</div>
+      </div>
+      <div class="cat-body" id="body-${cat.id}" style="display:none">
+        <textarea class="cat-ta" id="ta-${cat.id}" placeholder="${cat.ph}" rows="2"
+          oninput="resize(this);autoSave('${cat.id}')"
+        >${e.text}</textarea>
+      </div>`;
+    el.appendChild(c);
+  });
+  updatePill();
+}
+
+function toggleCard(id){
+  const b=document.getElementById('body-'+id);
+  const o=b.style.display==='block';
+  b.style.display=o?'none':'block';
+  if(!o){const ta=document.getElementById('ta-'+id);resize(ta);setTimeout(()=>ta.focus(),40);}
+}
+
+function toggleDone(e,id,color){
+  e.stopPropagation();
+  const t=todayKey(),day=getDay(t);
+  if(!day.entries[id])day.entries[id]={text:'',done:false};
+  day.entries[id].done=!day.entries[id].done;
+  saveDayDB(t,day);
+  const el=document.getElementById('ck-'+id);
+  const card=document.getElementById('card-'+id);
+  if(day.entries[id].done){
+    el.classList.add('checked');
+    el.style.background=color;el.style.borderColor=color;
+    card.classList.add('done');
+  } else {
+    el.classList.remove('checked');
+    el.style.background='';el.style.borderColor='';
+    card.classList.remove('done');
+  }
+  updatePill();
+  scheduleSyncToNotion(t);
+}
+
+function autoSave(id){
+  const t=todayKey(),day=getDay(t);
+  if(!day.entries[id])day.entries[id]={text:'',done:false};
+  day.entries[id].text=document.getElementById('ta-'+id).value;
+  saveDayDB(t,day);
+  scheduleSyncToNotion(t);
+}
+
+function resize(ta){ta.style.height='auto';ta.style.height=ta.scrollHeight+'px';}
+
+function updatePill(){
+  const t=todayKey(),day=getDay(t);
+  const n=CATS.filter(c=>day.entries[c.id]?.done).length;
+  document.getElementById('nav-pill').textContent=n+' / 6';
+}
+
+function saveDay(){
+  const t=todayKey(),day=getDay(t);
+  day.saved=true;saveDayDB(t,day);
+  syncDayToNotion(t);
+  showToast('Saving to Notion…');
+}
+
+// PROGRESS
+function buildProgress(){
+  const days=DB.get('fd',{});
+  const dates=Object.keys(days);
+  let tot=0,comp=0;
+  dates.forEach(d=>CATS.forEach(c=>{const e=days[d].entries?.[c.id];if(e?.text){tot++;if(e.done)comp++;}}));
+  const streak=calcStreak(days);
+  document.getElementById('streak-n').textContent=streak;
+  document.getElementById('stats-g').innerHTML=`
+    <div class="stat-box"><div class="stat-v">${dates.length}</div><div class="stat-l">Days filled</div></div>
+    <div class="stat-box"><div class="stat-v">${comp}</div><div class="stat-l">Tasks done</div><div class="stat-s">of ${tot} set</div></div>
+    <div class="stat-box"><div class="stat-v">${tot?Math.round(comp/tot*100):0}%</div><div class="stat-l">Completion rate</div></div>
+    <div class="stat-box"><div class="stat-v">${streak}</div><div class="stat-l">Current streak</div><div class="stat-s">days in a row</div></div>`;
+  buildWeek(days);buildHistList();
+}
+
+function calcStreak(days){
+  let s=0,d=new Date();
+  for(;;){
+    const k=d.toISOString().slice(0,10);
+    if(!days[k]||!CATS.some(c=>days[k].entries?.[c.id]?.text))break;
+    s++;d.setDate(d.getDate()-1);
+  }
+  return s;
+}
+
+function buildWeek(days){
+  const g=document.getElementById('week-g');
+  g.innerHTML='';
+  const today=new Date(),ts=todayKey();
+  const dl=['Su','Mo','Tu','We','Th','Fr','Sa'];
+  for(let i=6;i>=0;i--){
+    const d=new Date(today);d.setDate(today.getDate()-i);
+    const k=localDateStr(d);
+    const dd=days[k];
+    const dots=CATS.map(c=>{
+      const e=dd?.entries?.[c.id];
+      return`<div class="wc-dot" style="background:${e?.done?c.color:(e?.text?'#ccc':'#eee')}"></div>`;
+    }).join('');
+    g.innerHTML+=`<div class="wc${k===ts?' wc-today':''}${k>ts?' wc-future':''}">
+      <div class="wc-d">${dl[d.getDay()]}</div>
+      <div class="wc-n">${d.getDate()}</div>
+      <div class="wc-dots">${dots}</div>
+    </div>`;
+  }
+}
+
+let curP=7;
+function buildHistList(p=curP){
+  const el=document.getElementById('hist-list');el.innerHTML='';
+  const days=DB.get('fd',{});
+  const today=new Date();
+  const rows=[];
+  for(let i=0;i<p;i++){
+    const d=new Date(today);d.setDate(today.getDate()-i);
+    const k=localDateStr(d);
+    if(days[k])rows.push({k,d,data:days[k]});
+  }
+  if(!rows.length){el.innerHTML='<div style="color:var(--muted);text-align:center;padding:36px 0;font-size:14px;">No entries yet</div>';return;}
+  rows.forEach(({k,d,data})=>{
+    const div=document.createElement('div');div.className='hday';
+    const ds=d.toLocaleDateString('en',{weekday:'short',month:'short',day:'numeric'});
+    const dots=CATS.map(c=>{const e=data.entries?.[c.id];return`<div class="wc-dot" style="width:8px;height:8px;border-radius:50%;background:${e?.done?c.color:(e?.text?'#ccc':'#e8e6e1')}"></div>`;}).join('');
+    const entries=CATS.map(c=>{
+      const e=data.entries?.[c.id];if(!e?.text)return'';
+      return`<div class="hentry"><div class="hcat" style="color:${c.color}">${c.name}</div><div class="htxt">${e.text}</div><div class="hchk">${e.done?'✓':''}</div></div>`;
+    }).join('');
+    div.innerHTML=`
+      <div class="hday-hd" onclick="this.nextElementSibling.classList.toggle('open')">
+        <div class="hday-t">${ds}</div>
+        <div class="hday-dots">${dots}</div>
+      </div>
+      <div class="hentries">${entries||'<div style="padding:8px 14px;font-size:13px;color:var(--muted)">No entries</div>'}</div>`;
+    el.appendChild(div);
+  });
+}
+
+function setPeriod(p,btn){
+  curP=p;
+  document.querySelectorAll('.pbtn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  buildHistList(p);
+}
+
+// PLAN
+let activeCat='main';
+
+// Day 1 = March 5, 2026
+const DAY_ONE = new Date('2026-03-05');
+function dayNumber(dateStr){
+  const d=new Date(dateStr);
+  const diff=Math.round((d-DAY_ONE)/(1000*60*60*24));
+  return diff>=0 ? diff+1 : null;
+}
+
+function buildPlan(){
+  const row=document.getElementById('plan-cats');row.innerHTML='';
+  CATS.forEach(cat=>{
+    const b=document.createElement('button');
+    b.className='pcbtn'+(cat.id===activeCat?' active':'');
+    b.id='pc-'+cat.id;
+    b.innerHTML=`<div class="ppip" style="background:${cat.color}"></div>${cat.emoji} ${cat.name}`;
+    b.onclick=()=>{activeCat=cat.id;document.querySelectorAll('.pcbtn').forEach(x=>x.classList.remove('active'));b.classList.add('active');buildPlanTl();};
+    row.appendChild(b);
+  });
+  buildPlanTl();
+}
+
+function buildPlanTl(){
+  const tl=document.getElementById('plan-tl');tl.innerHTML='';
+  const base=new Date();
+  const plans=DB.get('fp',{});
+  const dl=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+  // Start from DAY_ONE, go 100 days into future
+  const start=new Date(DAY_ONE.getFullYear(),DAY_ONE.getMonth(),DAY_ONE.getDate());
+  const ts=todayKey();
+  // parse today's local date string back to a comparable value
+  const [ty,tm,td]=ts.split('-').map(Number);
+  const todayM=new Date(ty,tm-1,td);
+  const daysSinceStart=Math.floor((todayM-start)/(1000*60*60*24));
+  const totalDays=daysSinceStart+1+100;
+
+  for(let i=0;i<totalDays;i++){
+    const d=new Date(start);d.setDate(start.getDate()+i);
+    // build k as YYYY-MM-DD from local calendar date (no timezone shift)
+    const k=[d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');
+    const isT=k===ts;
+    const isPast=k<ts;
+    const dayN=i+1;
+    const monthDay=d.toLocaleDateString('en',{month:'long',day:'numeric'});
+    const weekday=dl[d.getDay()];
+    const lbl=isT
+      ? `Today · Day ${dayN} · ${monthDay}`
+      : `Day ${dayN} · ${weekday}, ${monthDay}`;
+    const pk=k+'_'+activeCat;
+    const val=plans[pk]||'';
+    const actual=getDay(k).entries?.[activeCat]?.text||'';
+    const row=document.createElement('div');
+    row.className='plan-row'+(isT?' plan-today':'');
+    row.id='planrow-'+k;
+    row.innerHTML=`
+      <div class="plan-lbl${isT?' tday':''}${isPast?' past-lbl':''}">${lbl}</div>
+      ${isT&&actual?`<div class="plan-actual">Today's entry: ${actual}</div>`:''}
+      ${isPast&&actual?`<div class="plan-actual" style="color:var(--muted2)">${actual}</div>`:''}
+      ${(!isPast||!actual)?`<textarea class="plan-ta" placeholder="Set focus…" data-pk="${pk}"
+        oninput="savePlan(this)">${val}</textarea>`:''}`;
+    tl.appendChild(row);
+  }
+  // scroll today into view
+  setTimeout(()=>{
+    const el=document.getElementById('planrow-'+ts);
+    if(el)el.scrollIntoView({behavior:'instant',block:'start'});
+  },60);
+}
+
+function savePlan(ta){
+  const p=DB.get('fp',{});p[ta.dataset.pk]=ta.value;DB.set('fp',p);
+  // sync the day this plan belongs to
+  const dateStr=ta.dataset.pk.split('_')[0];
+  scheduleSyncToNotion(dateStr);
+}
+
+// UTILS
+function showScreen(name){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.querySelectorAll('.bn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('screen-'+name).classList.add('active');
+  document.getElementById('bn-'+name).classList.add('active');
+  if(name==='history')buildProgress();
+  if(name==='plan')buildPlan();
+}
+
+function showToast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),2500);
+}
+
+// INIT
+(function(){
+  const now=new Date();
+  const monthDay=now.toLocaleDateString('en',{month:'long',day:'numeric'});
+  // Use UTC midnight comparison to avoid timezone drift
+  const todayMidnight=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  const day1Midnight=new Date(DAY_ONE.getFullYear(),DAY_ONE.getMonth(),DAY_ONE.getDate());
+  const dayN=Math.floor((todayMidnight-day1Midnight)/(1000*60*60*24))+1;
+  const dayStr=dayN>=1?`Day ${dayN} · ${monthDay}`:monthDay;
+  document.getElementById('nav-date').textContent=dayStr;
+  buildCards();
+  // Auto-load from Notion on startup
+  loadFromNotion();
+})();
+</script>
+</body>
+</html>
