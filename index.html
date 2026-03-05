@@ -463,7 +463,7 @@ function buildCards(){
           style="${e.done?`background:${cat.color};border-color:${cat.color}`:''}"
           onclick="toggleDone(event,'${cat.id}','${cat.color}')">✓</div>
       </div>
-      <div class="cat-body" id="body-${cat.id}" style="display:none">
+      <div class="cat-body" id="body-${cat.id}" style="display:${e.text?'block':'none'}">
         <textarea class="cat-ta" id="ta-${cat.id}" placeholder="${cat.ph}" rows="2"
           oninput="resize(this);autoSave('${cat.id}')"
         >${e.text}</textarea>
@@ -475,9 +475,13 @@ function buildCards(){
 
 function toggleCard(id){
   const b=document.getElementById('body-'+id);
+  const ta=document.getElementById('ta-'+id);
+  const hasText=ta&&ta.value.trim().length>0;
+  // If has text, always keep open; just focus
+  if(hasText){ta.focus();return;}
   const o=b.style.display==='block';
   b.style.display=o?'none':'block';
-  if(!o){const ta=document.getElementById('ta-'+id);resize(ta);setTimeout(()=>ta.focus(),40);}
+  if(!o){resize(ta);setTimeout(()=>ta.focus(),40);}
 }
 
 function toggleDone(e,id,color){
@@ -504,8 +508,11 @@ function toggleDone(e,id,color){
 function autoSave(id){
   const t=todayKey(),day=getDay(t);
   if(!day.entries[id])day.entries[id]={text:'',done:false};
-  day.entries[id].text=document.getElementById('ta-'+id).value;
+  const val=document.getElementById('ta-'+id).value;
+  day.entries[id].text=val;
   saveDayDB(t,day);
+  // Keep body visible as long as there's text
+  document.getElementById('body-'+id).style.display='block';
   scheduleSync(t);
 }
 
