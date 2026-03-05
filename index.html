@@ -196,20 +196,31 @@
   .plan-tl { padding-top: 14px; }
   .plan-row { margin-bottom: 10px; }
   .plan-today { padding: 12px; background: var(--surface); border: 1px solid var(--border2); border-radius: var(--r); box-shadow: var(--shadow-sm); margin-bottom: 14px; }
-  .plan-lbl { font-size: 11.5px; color: var(--muted); margin-bottom: 5px; font-weight: 400; }
+  .plan-lbl { font-size: 11.5px; color: var(--muted); margin-bottom: 6px; font-weight: 400; display: flex; align-items: center; justify-content: space-between; }
   .plan-lbl.tday { color: var(--text); font-weight: 600; font-size: 12.5px; }
   .plan-lbl.past-lbl { color: var(--muted2); }
+  .plan-edit-btn {
+    font-size: 11px; color: var(--muted); background: none; border: 1px solid var(--border);
+    border-radius: 8px; padding: 2px 8px; cursor: pointer; font-family: 'Instrument Sans', sans-serif;
+    transition: all .15s; flex-shrink: 0;
+  }
+  .plan-edit-btn:hover { border-color: var(--border2); color: var(--text); }
+  .plan-text-display {
+    font-size: 13.5px; line-height: 1.55; color: var(--text);
+    padding: 10px 13px; background: var(--bg);
+    border: 1px solid transparent; border-radius: var(--r-sm);
+  }
+  .plan-text-display.empty { color: var(--muted2); font-style: italic; }
   .plan-ta {
-    width: 100%; background: var(--surface); border: 1px solid var(--border);
+    width: 100%; background: var(--surface); border: 1px solid var(--border2);
     border-radius: var(--r-sm); color: var(--text);
     font-family: 'Instrument Sans', sans-serif; font-size: 13.5px;
     padding: 10px 13px; resize: none; outline: none;
     transition: border-color .2s, box-shadow .2s; min-height: 42px;
-    line-height: 1.5; box-shadow: var(--shadow-sm);
+    line-height: 1.5; box-shadow: var(--shadow);
   }
-  .plan-ta:focus { border-color: var(--border2); box-shadow: var(--shadow); }
+  .plan-ta:focus { border-color: var(--text); }
   .plan-ta::placeholder { color: var(--muted2); }
-  .plan-ta-filled { border-color: var(--border2); background: white; }
   .plan-actual { font-size: 11.5px; color: var(--muted); padding-bottom: 5px; }
 
   /* BOTTOM NAV */
@@ -669,17 +680,25 @@ function buildPlanTl(){
     const pk=k+'_'+activeCat;
     const val=plans[pk]||'';
     const actual=getDay(k).entries?.[activeCat]?.text||'';
-    // Single source of truth: if Today has an entry, that's the value; plan note is secondary
     const displayVal=actual||val;
+    const rowId='planrow-'+k;
     const row=document.createElement('div');
     row.className='plan-row'+(isT?' plan-today':'');
-    row.id='planrow-'+k;
+    row.id=rowId;
+    // Label with edit button
+    const lblClass=`plan-lbl${isT?' tday':''}${isPast?' past-lbl':''}`;
     row.innerHTML=`
-      <div class="plan-lbl${isT?' tday':''}${isPast?' past-lbl':''}">${lbl}</div>
-      <textarea class="plan-ta${actual?' plan-ta-filled':''}" 
-        placeholder="Set focus…" 
-        data-pk="${pk}" data-date="${k}" data-cat="${activeCat}"
-        oninput="savePlanEntry(this)">${displayVal}</textarea>`;
+      <div class="${lblClass}">
+        <span>${lbl}</span>
+        <button class="plan-edit-btn" onclick="togglePlanEdit('${k}','${activeCat}')">✏ Edit</button>
+      </div>
+      <div class="plan-text-display${displayVal?'':' empty'}" id="pdisp-${k}-${activeCat}"
+        ondblclick="togglePlanEdit('${k}','${activeCat}')"
+      >${displayVal||'No focus set'}</div>
+      <textarea class="plan-ta" id="pta-${k}-${activeCat}"
+        placeholder="Set focus…" data-pk="${pk}" data-date="${k}" data-cat="${activeCat}"
+        oninput="savePlanEntry(this)"
+        style="display:none">${displayVal}</textarea>`;
     tl.appendChild(row);
   }
   setTimeout(()=>{
@@ -688,28 +707,52 @@ function buildPlanTl(){
   },60);
 }
 
+function togglePlanEdit(dateStr, cat){
+  const disp=document.getElementById('pdisp-'+dateStr+'-'+cat);
+  const ta=document.getElementById('pta-'+dateStr+'-'+cat);
+  if(!disp||!ta)return;
+  const isEditing=ta.style.display!=='none';
+  if(isEditing){
+    // save and close
+    finishPlanEdit(ta, disp);
+  } else {
+    // open editor
+    disp.style.display='none';
+    ta.style.display='block';
+    ta.focus();
+    ta.selectionStart=ta.selectionEnd=ta.value.length;
+    // close on blur
+    ta.onblur=()=>finishPlanEdit(ta, disp);
+  }
+}
+
+function finishPlanEdit(ta, disp){
+  const val=ta.value.trim();
+  disp.textContent=val||'No focus set';
+  disp.className='plan-text-display'+(val?'':' empty');
+  ta.style.display='none';
+  disp.style.display='block';
+}
+
 function savePlanEntry(ta){
   const dateStr=ta.dataset.date;
   const cat=ta.dataset.cat;
   const val=ta.value;
-  // Save to plan storage
   const p=DB.get('fp',{});
   p[ta.dataset.pk]=val;
   DB.set('fp',p);
-  // Also write back to Today entries so Progress/Today stay in sync
+  // Write back to Today entries
   const day=getDay(dateStr);
   if(!day.entries[cat])day.entries[cat]={text:'',done:false};
   day.entries[cat].text=val;
   saveDayDB(dateStr,day);
-  // Update Today cards if we're editing today
   if(dateStr===todayKey()){
     const ta2=document.getElementById('ta-'+cat);
-    if(ta2)ta2.value=val;
+    if(ta2){ta2.value=val;document.getElementById('body-'+cat).style.display='block';}
     updatePill();
   }
   scheduleSync(dateStr);
 }
-// keep old name as alias just in case
 function savePlan(ta){savePlanEntry(ta);}
 
 // UTILS
