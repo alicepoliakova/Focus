@@ -355,7 +355,10 @@ const getDay=k=>{const d=DB.get('fd',{});return d[k]||{entries:{}}};
 const saveDayDB=(k,v)=>{const d=DB.get('fd',{});d[k]=v;DB.set('fd',d)};
 
 // ── SUPABASE (plug in your credentials when ready) ───────────────────────────
-const SB={url:'',key:''};  // ← will be filled with Supabase URL + anon key
+const SB={
+  url:'https://gkzdqgawxwinqhonlgar.supabase.co',
+  key:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdremRxZ2F3eHdpbnFob25sZ2FyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI3NDQ4NDMsImV4cCI6MjA4ODMyMDg0M30.3Rq6AlW1l9w7RQtt3EHXFL5KTklvNfJKjnDGMus5mLU'
+};
 
 async function sbUpsert(dateStr){
   if(!SB.url||!SB.key)return;
