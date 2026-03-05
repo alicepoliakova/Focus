@@ -209,6 +209,7 @@
   }
   .plan-ta:focus { border-color: var(--border2); box-shadow: var(--shadow); }
   .plan-ta::placeholder { color: var(--muted2); }
+  .plan-ta-filled { border-color: var(--border2); background: white; }
   .plan-actual { font-size: 11.5px; color: var(--muted); padding-bottom: 5px; }
 
   /* BOTTOM NAV */
@@ -661,14 +662,17 @@ function buildPlanTl(){
     const pk=k+'_'+activeCat;
     const val=plans[pk]||'';
     const actual=getDay(k).entries?.[activeCat]?.text||'';
+    // Single source of truth: if Today has an entry, that's the value; plan note is secondary
+    const displayVal=actual||val;
     const row=document.createElement('div');
     row.className='plan-row'+(isT?' plan-today':'');
     row.id='planrow-'+k;
     row.innerHTML=`
       <div class="plan-lbl${isT?' tday':''}${isPast?' past-lbl':''}">${lbl}</div>
-      ${actual?`<div class="plan-actual" style="${isT?'color:var(--text);font-weight:500':'color:var(--muted2)'}">✎ ${actual}</div>`:''}
-      <textarea class="plan-ta" placeholder="Set focus…" data-pk="${pk}"
-        oninput="savePlan(this)">${val}</textarea>`;
+      <textarea class="plan-ta${actual?' plan-ta-filled':''}" 
+        placeholder="Set focus…" 
+        data-pk="${pk}" data-date="${k}" data-cat="${activeCat}"
+        oninput="savePlanEntry(this)">${displayVal}</textarea>`;
     tl.appendChild(row);
   }
   setTimeout(()=>{
@@ -677,11 +681,29 @@ function buildPlanTl(){
   },60);
 }
 
-function savePlan(ta){
-  const p=DB.get('fp',{});p[ta.dataset.pk]=ta.value;DB.set('fp',p);
-  const dateStr=ta.dataset.pk.split('_')[0];
+function savePlanEntry(ta){
+  const dateStr=ta.dataset.date;
+  const cat=ta.dataset.cat;
+  const val=ta.value;
+  // Save to plan storage
+  const p=DB.get('fp',{});
+  p[ta.dataset.pk]=val;
+  DB.set('fp',p);
+  // Also write back to Today entries so Progress/Today stay in sync
+  const day=getDay(dateStr);
+  if(!day.entries[cat])day.entries[cat]={text:'',done:false};
+  day.entries[cat].text=val;
+  saveDayDB(dateStr,day);
+  // Update Today cards if we're editing today
+  if(dateStr===todayKey()){
+    const ta2=document.getElementById('ta-'+cat);
+    if(ta2)ta2.value=val;
+    updatePill();
+  }
   scheduleSync(dateStr);
 }
+// keep old name as alias just in case
+function savePlan(ta){savePlanEntry(ta);}
 
 // UTILS
 function showScreen(name){
