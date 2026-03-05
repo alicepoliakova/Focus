@@ -263,7 +263,7 @@
     <div class="nav-pill" id="nav-pill">0 / 6</div>
     <div style="display:flex;align-items:center;gap:6px;">
       <span class="sync-badge sync-synced" id="sync-status">✓ Notion</span>
-      <button class="sync-btn" onclick="loadFromNotion()">↓ Load</button>
+      <button class="sync-btn" onclick="sbLoad()">↓ Load</button>
     </div>
   </div>
 </div>
@@ -354,179 +354,86 @@ const todayKey=()=>localDateStr();
 const getDay=k=>{const d=DB.get('fd',{});return d[k]||{entries:{}}};
 const saveDayDB=(k,v)=>{const d=DB.get('fd',{});d[k]=v;DB.set('fd',d)};
 
-// ── NOTION SYNC ──────────────────────────────────────────────────────────────
-const NOTION_DS='collection://2ab37e55-9f88-48dd-beac-f1912215b868';
+// ── SUPABASE (plug in your credentials when ready) ───────────────────────────
+const SB={url:'',key:''};  // ← will be filled with Supabase URL + anon key
 
-// Day number helper
-const DAY_ONE_SYNC=new Date(2026,2,5); // March 5 local
-function dayNum(dateStr){
-  const[y,m,d]=dateStr.split('-').map(Number);
-  const dt=new Date(y,m-1,d);
-  return Math.floor((dt-DAY_ONE_SYNC)/(864e5))+1;
-}
-
-// Debounce sync: wait 2s after last change before syncing
-let syncTimer=null;
-function scheduleSyncToNotion(dateStr){
-  clearTimeout(syncTimer);
-  syncTimer=setTimeout(()=>syncDayToNotion(dateStr),2000);
-}
-
-async function callClaude(prompt){
-  const r=await fetch('https://api.anthropic.com/v1/messages',{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({
-      model:'claude-sonnet-4-20250514',
-      max_tokens:1000,
-      system:'You are a Notion API assistant. When asked to perform a Notion operation, use the available MCP tools. Respond only with "done" after completing the task.',
-      messages:[{role:'user',content:prompt}],
-      mcp_servers:[{type:'url',url:'https://mcp.notion.com/mcp',name:'notion'}]
-    })
-  });
-  return r.ok;
-}
-
-async function syncDayToNotion(dateStr){
-  setSyncStatus('syncing');
+async function sbUpsert(dateStr){
+  if(!SB.url||!SB.key)return;
   const day=getDay(dateStr);
-  const dn=dayNum(dateStr);
-  const [y,m,d]=dateStr.split('-').map(Number);
-  const dateLabel=new Date(y,m-1,d).toLocaleDateString('en',{month:'long',day:'numeric',year:'numeric'});
-  const e=cat=>day.entries?.[cat]||{text:'',done:false};
-  const done=cat=>e(cat).done?'__YES__':'__NO__';
-  const txt=cat=>e(cat).text||'';
   const plans=DB.get('fp',{})||{};
-  const pl=cat=>plans[dateStr+'_'+cat]||'';
-  const score=CATS.filter(c=>e(c.id).done).length;
-
-  // Search for existing Notion page for this date
+  const e=id=>day.entries?.[id]||{text:'',done:false};
+  const [y,m,dd]=dateStr.split('-').map(Number);
+  const dayN=Math.floor((new Date(y,m-1,dd)-new Date(2026,2,5))/864e5)+1;
+  const row={
+    date:dateStr, day_number:dayN,
+    core:e('main').text,    core_done:e('main').done,
+    body:e('body').text,    body_done:e('body').done,
+    startup:e('startup').text, startup_done:e('startup').done,
+    ai:e('ai').text,        ai_done:e('ai').done,
+    work:e('work').text,    work_done:e('work').done,
+    future:e('future').text, future_done:e('future').done,
+    plan_core:plans[dateStr+'_main']||'',
+    plan_body:plans[dateStr+'_body']||'',
+    plan_startup:plans[dateStr+'_startup']||'',
+    plan_ai:plans[dateStr+'_ai']||'',
+    plan_work:plans[dateStr+'_work']||'',
+    plan_future:plans[dateStr+'_future']||'',
+    score:CATS.filter(c=>e(c.id).done).length,
+    updated_at:new Date().toISOString()
+  };
   try{
-    const searchResp=await fetch('https://api.anthropic.com/v1/messages',{
+    await fetch(`${SB.url}/rest/v1/focus_entries`,{
       method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({
-        model:'claude-sonnet-4-20250514',
-        max_tokens:500,
-        system:'You are a Notion API assistant. Search for a page in the Focus Tracker database where Date equals "'+dateStr+'". Return ONLY the page URL if found, or "NOT_FOUND" if not found. Nothing else.',
-        messages:[{role:'user',content:'Search Notion Focus Tracker database for page with title "'+dateStr+'"'}],
-        mcp_servers:[{type:'url',url:'https://mcp.notion.com/mcp',name:'notion'}]
-      })
+      headers:{'Content-Type':'application/json','apikey':SB.key,'Authorization':'Bearer '+SB.key,'Prefer':'resolution=merge-duplicates'},
+      body:JSON.stringify(row)
     });
-    const searchData=await searchResp.json();
-    const searchText=searchData.content?.map(b=>b.text||'').join('')||'';
-    const existingUrl=searchText.includes('notion.so')?searchText.trim():null;
-
-    const props={
-      'Date':dateStr+' — '+dateLabel,
-      'Day Number':dn,
-      'Core':txt('main'),'Core Done':done('main'),
-      'Body':txt('body'),'Body Done':done('body'),
-      'Startup':txt('startup'),'Startup Done':done('startup'),
-      'AI':txt('ai'),'AI Done':done('ai'),
-      'Work':txt('work'),'Work Done':done('work'),
-      'Future':txt('future'),'Future Done':done('future'),
-      'Score':score,
-      'Plan Core':pl('main'),'Plan Body':pl('body'),
-      'Plan Startup':pl('startup'),'Plan AI':pl('ai'),
-      'Plan Work':pl('work'),'Plan Future':pl('future'),
-    };
-
-    const propsStr=JSON.stringify(props);
-
-    if(existingUrl&&existingUrl!=='NOT_FOUND'){
-      // Update existing page
-      const pageId=existingUrl.split('-').pop()?.replace(/\//g,'')||existingUrl;
-      await fetch('https://api.anthropic.com/v1/messages',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({
-          model:'claude-sonnet-4-20250514',
-          max_tokens:500,
-          system:'You are a Notion API assistant. Update the Notion page properties as instructed using update-page tool. Respond with "done" when complete.',
-          messages:[{role:'user',content:`Update Notion page at URL "${existingUrl.trim()}" with these properties: ${propsStr}`}],
-          mcp_servers:[{type:'url',url:'https://mcp.notion.com/mcp',name:'notion'}]
-        })
-      });
-    } else {
-      // Create new page
-      await fetch('https://api.anthropic.com/v1/messages',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({
-          model:'claude-sonnet-4-20250514',
-          max_tokens:500,
-          system:'You are a Notion API assistant. Create a new page in the Focus Tracker Notion database (data source: '+NOTION_DS+') with the given properties. Respond with "done".',
-          messages:[{role:'user',content:`Create a new page in the Focus Tracker database with these properties: ${propsStr}`}],
-          mcp_servers:[{type:'url',url:'https://mcp.notion.com/mcp',name:'notion'}]
-        })
-      });
-    }
     setSyncStatus('synced');
-  }catch(err){
-    console.error('Notion sync error:',err);
-    setSyncStatus('error');
-  }
+  }catch(err){setSyncStatus('error');console.error(err);}
 }
 
-async function loadFromNotion(){
+async function sbLoad(){
+  if(!SB.url||!SB.key)return;
   setSyncStatus('loading');
   try{
-    const resp=await fetch('https://api.anthropic.com/v1/messages',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({
-        model:'claude-sonnet-4-20250514',
-        max_tokens:4000,
-        system:'You are a Notion API assistant. Fetch all pages from the Focus Tracker database and return ONLY a raw JSON array (no markdown, no backticks) where each object has keys: date (YYYY-MM-DD from Date field), dayNum, core, coreDone, body, bodyDone, startup, startupDone, ai, aiDone, work, workDone, future, futureDone, planCore, planBody, planStartup, planAI, planWork, planFuture. Boolean fields should be true/false.',
-        messages:[{role:'user',content:'Fetch all pages from the Focus Tracker Notion database at data source '+NOTION_DS+' and return JSON array of all entries.'}],
-        mcp_servers:[{type:'url',url:'https://mcp.notion.com/mcp',name:'notion'}]
-      })
+    const resp=await fetch(`${SB.url}/rest/v1/focus_entries?select=*&order=date.asc`,{
+      headers:{'apikey':SB.key,'Authorization':'Bearer '+SB.key}
     });
-    const data=await resp.json();
-    const raw=data.content?.map(b=>b.text||'').join('')||'';
-    // Extract JSON array
-    const match=raw.match(/\[[\s\S]*\]/);
-    if(match){
-      const rows=JSON.parse(match[0]);
-      const fd=DB.get('fd',{})||{};
-      const fp=DB.get('fp',{})||{};
-      rows.forEach(r=>{
-        if(!r.date)return;
-        const dateStr=r.date.slice(0,10);
-        fd[dateStr]={entries:{
-          main:{text:r.core||'',done:!!r.coreDone},
-          body:{text:r.body||'',done:!!r.bodyDone},
-          startup:{text:r.startup||'',done:!!r.startupDone},
-          ai:{text:r.ai||'',done:!!r.aiDone},
-          work:{text:r.work||'',done:!!r.workDone},
-          future:{text:r.future||'',done:!!r.futureDone},
-        }};
-        if(r.planCore)fp[dateStr+'_main']=r.planCore;
-        if(r.planBody)fp[dateStr+'_body']=r.planBody;
-        if(r.planStartup)fp[dateStr+'_startup']=r.planStartup;
-        if(r.planAI)fp[dateStr+'_ai']=r.planAI;
-        if(r.planWork)fp[dateStr+'_work']=r.planWork;
-        if(r.planFuture)fp[dateStr+'_future']=r.planFuture;
-      });
-      DB.set('fd',fd);
-      DB.set('fp',fp);
-      setSyncStatus('synced');
-      buildCards();
-      showToast('Synced from Notion ✓');
-    } else {
-      setSyncStatus('synced');
-    }
-  }catch(err){
-    console.error('Load from Notion error:',err);
-    setSyncStatus('error');
-  }
+    const rows=await resp.json();
+    const fd=DB.get('fd',{})||{};
+    const fp=DB.get('fp',{})||{};
+    rows.forEach(r=>{
+      const ds=r.date;
+      fd[ds]={entries:{
+        main:{text:r.core||'',done:!!r.core_done},
+        body:{text:r.body||'',done:!!r.body_done},
+        startup:{text:r.startup||'',done:!!r.startup_done},
+        ai:{text:r.ai||'',done:!!r.ai_done},
+        work:{text:r.work||'',done:!!r.work_done},
+        future:{text:r.future||'',done:!!r.future_done},
+      }};
+      if(r.plan_core)fp[ds+'_main']=r.plan_core;
+      if(r.plan_body)fp[ds+'_body']=r.plan_body;
+      if(r.plan_startup)fp[ds+'_startup']=r.plan_startup;
+      if(r.plan_ai)fp[ds+'_ai']=r.plan_ai;
+      if(r.plan_work)fp[ds+'_work']=r.plan_work;
+      if(r.plan_future)fp[ds+'_future']=r.plan_future;
+    });
+    DB.set('fd',fd);DB.set('fp',fp);
+    setSyncStatus('synced');
+    buildCards();
+    showToast('Loaded from Supabase ✓');
+  }catch(err){setSyncStatus('error');console.error(err);}
+}
+
+let syncTimer=null;
+function scheduleSync(dateStr){
+  clearTimeout(syncTimer);
+  syncTimer=setTimeout(()=>sbUpsert(dateStr),1500);
 }
 
 function setSyncStatus(status){
-  const el=document.getElementById('sync-status');
-  if(!el)return;
-  const map={syncing:'⟳ Syncing…',synced:'✓ Synced',error:'⚠ Sync error',loading:'⟳ Loading…'};
+  const el=document.getElementById('sync-status');if(!el)return;
+  const map={syncing:'⟳ Syncing…',synced:SB.url?'✓ Supabase':'◎ Local',error:'⚠ Sync error',loading:'⟳ Loading…'};
   el.textContent=map[status]||'';
   el.className='sync-badge sync-'+status;
 }
@@ -587,7 +494,7 @@ function toggleDone(e,id,color){
     card.classList.remove('done');
   }
   updatePill();
-  scheduleSyncToNotion(t);
+  scheduleSync(t);
 }
 
 function autoSave(id){
@@ -595,7 +502,7 @@ function autoSave(id){
   if(!day.entries[id])day.entries[id]={text:'',done:false};
   day.entries[id].text=document.getElementById('ta-'+id).value;
   saveDayDB(t,day);
-  scheduleSyncToNotion(t);
+  scheduleSync(t);
 }
 
 function resize(ta){ta.style.height='auto';ta.style.height=ta.scrollHeight+'px';}
@@ -609,8 +516,8 @@ function updatePill(){
 function saveDay(){
   const t=todayKey(),day=getDay(t);
   day.saved=true;saveDayDB(t,day);
-  syncDayToNotion(t);
-  showToast('Saving to Notion…');
+  sbUpsert(t);
+  showToast('Day saved ✓');
 }
 
 // PROGRESS
@@ -632,7 +539,7 @@ function buildProgress(){
 function calcStreak(days){
   let s=0,d=new Date();
   for(;;){
-    const k=d.toISOString().slice(0,10);
+    const k=localDateStr(d);
     if(!days[k]||!CATS.some(c=>days[k].entries?.[c.id]?.text))break;
     s++;d.setDate(d.getDate()-1);
   }
@@ -756,13 +663,11 @@ function buildPlanTl(){
     row.id='planrow-'+k;
     row.innerHTML=`
       <div class="plan-lbl${isT?' tday':''}${isPast?' past-lbl':''}">${lbl}</div>
-      ${isT&&actual?`<div class="plan-actual">Today's entry: ${actual}</div>`:''}
-      ${isPast&&actual?`<div class="plan-actual" style="color:var(--muted2)">${actual}</div>`:''}
-      ${(!isPast||!actual)?`<textarea class="plan-ta" placeholder="Set focus…" data-pk="${pk}"
-        oninput="savePlan(this)">${val}</textarea>`:''}`;
+      ${actual?`<div class="plan-actual" style="${isT?'color:var(--text);font-weight:500':'color:var(--muted2)'}">✎ ${actual}</div>`:''}
+      <textarea class="plan-ta" placeholder="Set focus…" data-pk="${pk}"
+        oninput="savePlan(this)">${val}</textarea>`;
     tl.appendChild(row);
   }
-  // scroll today into view
   setTimeout(()=>{
     const el=document.getElementById('planrow-'+ts);
     if(el)el.scrollIntoView({behavior:'instant',block:'start'});
@@ -771,9 +676,8 @@ function buildPlanTl(){
 
 function savePlan(ta){
   const p=DB.get('fp',{});p[ta.dataset.pk]=ta.value;DB.set('fp',p);
-  // sync the day this plan belongs to
   const dateStr=ta.dataset.pk.split('_')[0];
-  scheduleSyncToNotion(dateStr);
+  scheduleSync(dateStr);
 }
 
 // UTILS
@@ -803,8 +707,8 @@ function showToast(msg){
   const dayStr=dayN>=1?`Day ${dayN} · ${monthDay}`:monthDay;
   document.getElementById('nav-date').textContent=dayStr;
   buildCards();
-  // Auto-load from Notion on startup
-  loadFromNotion();
+  setSyncStatus('synced');
+  sbLoad(); // loads from Supabase if credentials are set
 })();
 </script>
 </body>
